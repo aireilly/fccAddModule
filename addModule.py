@@ -5,6 +5,7 @@
 # The program must run in the same directory as the master.adoc and assembly
 # files. If you specify the -o option, it will rename the module, include the
 # assembly include directive if -a is specified.
+# Uses Python 3.
 
 import os
 import sys
@@ -32,7 +33,7 @@ def main(argv):
     try:
 
         #define command line arguments.
-        opts, args = getopt.getopt(argv,"n:r:t:c:a:d:f:h",["name=","rename=","type=","component=","assembly=", "destination=", "format=", "help"])
+        opts, args = getopt.getopt(argv,"n:r:t:c:a:d:f:h",["name=","rename=","type=","component=","assembly=", "destination=", "format=", "delete=","help"])
 
         for opt, arg in opts:
             if opt in ("-n", "--name"):
@@ -49,12 +50,15 @@ def main(argv):
                 moduleDestinationPath = arg
             elif opt in ("-f", "--format"):
                 fileNameFormat = arg
+            elif opt in ("-e", "--delete"):
+                deleteFilename = arg
+                deleteModule(deleteFilename)
             elif opt in ("-h", "--help"):
                 printUsage()
                 sys.exit()
 
-        #addModule ALWAYS requires a module name.
-        if moduleName == "":
+        #addModule ALWAYS requires a module name, except when deleting a file.
+        if moduleName == "" and deleteFilename == "":
             print ("\nERROR: Module name is required! Use the -n or --name option.\n")
             printUsage()
             sys.exit()
@@ -78,58 +82,7 @@ def main(argv):
 
         includeText = getIncludeDirective(outputFileName)
 
-        #Test if oldName exists, and rename the module if it does.
-        if oldName !="":
-            # The inputModuleId is derived from the old name and to parse get inputFileName and old moduleID during rename operations.
-            inputModuleId = getModuleID(oldName)
-
-            if fileNameFormat == "fcc":
-                inputFileName = createFccFileName(moduleDestinationPath, moduleType, componentType, inputModuleId, locale, fileExtension)
-            elif fileNameFormat == "ocp":
-                inputFileName = createOcpFileName(moduleDestinationPath, componentType, inputModuleId, fileExtension)
-            elif fileNameFormat == "":
-                printUsage()
-                sys.exit()
-
-            inputFile = open (inputFileName, 'r')
-            moduleData = inputFile.read()
-            inputFile.close()
-
-            moduleMod = moduleData.replace(inputModuleId, outputModuleId)
-            moduleData = moduleMod.replace(oldName, moduleName)
-
-            outFile = open(outputFileName, 'w') #output file to write to.
-            outFile.write(moduleData)
-            outFile.close()
-
-            os.remove(inputFileName)
-            print (outputFileName)
-
-            if assemblyFileName != "":
-                assemblyFile = open(assemblyFileName, 'r')
-                assemblyData = assemblyFile.read()
-                assemblyFile.close()
-
-                inputIncludeText = getIncludeDirective(inputFileName)
-                modifiedAssemblyData = assemblyData.replace(inputIncludeText, includeText)
-
-                assemblyFile = open(assemblyFileName, 'w')
-                assemblyFile.write(modifiedAssemblyData)
-                assemblyFile.close()
-
-
-        else:
-            outFile = open(outputFileName, 'w') #output file to write to.
-            outFile.write(headingComment + "\n\n")
-            outFile.write(moduleId + "\n\n")
-            outFile.write("= " + moduleName + "\n")
-
-            if assemblyFileName != "":
-                assemblyFile = open(assemblyFileName, 'a')
-                assemblyFile.write("\n" + includeText + "\n")
-
-            print (outputFileName)
-
+        createModule(oldName, outputFileName, headingComment, moduleId, moduleName, assemblyFileName, includeText)
 
     except OSError as e:
         print(str(e))
@@ -161,7 +114,66 @@ def getHeadingComment(assemblyFileName):
 def getIncludeDirective(fileName):
         return "include::" + fileName + "[leveloffset=+1]"
 
+#Takes a number of parameters and creates the module and creates or updates The assembly
+def createModule(oldName, outputFileName, headingComment, moduleId, moduleName, assemblyFileName, includeText):
+    #Test if oldName exists, and rename the module if it does.
+    if oldName !="":
+        # The inputModuleId is derived from the old name and to parse get inputFileName and old moduleID during rename operations.
+        inputModuleId = getModuleID(oldName)
 
+        if fileNameFormat == "fcc":
+            inputFileName = createFccFileName(moduleDestinationPath, moduleType, componentType, inputModuleId, locale, fileExtension)
+        elif fileNameFormat == "ocp":
+            inputFileName = createOcpFileName(moduleDestinationPath, componentType, inputModuleId, fileExtension)
+        elif fileNameFormat == "":
+            printUsage()
+            sys.exit()
+
+        inputFile = open (inputFileName, 'r')
+        moduleData = inputFile.read()
+        inputFile.close()
+
+        moduleMod = moduleData.replace(inputModuleId, outputModuleId)
+        moduleData = moduleMod.replace(oldName, moduleName)
+
+        outFile = open(outputFileName, 'w') #output file to write to.
+        outFile.write(moduleData)
+        outFile.close()
+
+        os.remove(inputFileName)
+        print (outputFileName)
+
+        if assemblyFileName != "":
+            assemblyFile = open(assemblyFileName, 'r')
+            assemblyData = assemblyFile.read()
+            assemblyFile.close()
+
+            inputIncludeText = getIncludeDirective(inputFileName)
+            modifiedAssemblyData = assemblyData.replace(inputIncludeText, includeText)
+
+            assemblyFile = open(assemblyFileName, 'w')
+            assemblyFile.write(modifiedAssemblyData)
+            assemblyFile.close()
+
+
+    else:
+        outFile = open(outputFileName, 'w') #output file to write to.
+        outFile.write(headingComment + "\n\n")
+        outFile.write(moduleId + "\n\n")
+        outFile.write("= " + moduleName + "\n")
+
+        if assemblyFileName != "":
+            assemblyFile = open(assemblyFileName, 'a')
+            assemblyFile.write("\n" + includeText + "\n")
+
+        print (outputFileName)
+
+#Takes a module filename and deletes the file, removing it from any assembly it is found in, prints a warning to user if the module is referenced in an xref (?). 
+def deleteModule(deleteFilename):
+    os.remove(deleteFilename)
+    print ("Deleted " + deleteFilename)
+    #clean assembly
+    #hunt for xrefs
 
 def printUsage():
         print ("\n\n=================\naddModule.py Help\n=================\n\n\tThe addModule.py helper program will create a new module in the flexible customer\n\tcontent/modular format. This helper program MUST run in the same directory as the\n\tmain.adoc file. \n\n\tTo APPEND an include statement to an assembly, use the -a or --assembly option.\n\tThe assembly file SHOULD exist already; however, you may create a file without\n\tthe required formatting on-the-fly. To override the default component type in\n\taddModule.conf, use the -c or --component option.")
